@@ -14,7 +14,7 @@ postings = {}     # Postings lists for each token
 N = 0             # Total number of documents
 stop_words = set(stopwords.words('english'))
 stemmer = PorterStemmer()
-tokenizer = RegexpTokenizer(r'[a-zA-Z]+')
+tokenizer = RegexpTokenizer(r'[a-z]+')  # Updated to ensure lowercase tokens only
 
 # Step 1: Preprocess the corpus
 def preprocess_corpus():
@@ -22,8 +22,8 @@ def preprocess_corpus():
     for filename in os.listdir(corpusroot):
         if filename.endswith('.txt'):
             with open(os.path.join(corpusroot, filename), 'r', encoding='windows-1252') as file:
-                text = file.read().lower()
-                tokens = tokenizer.tokenize(text)
+                text = file.read().lower()  # Convert entire text to lowercase
+                tokens = tokenizer.tokenize(text)  # Tokenize lowercase text
                 tokens = [stemmer.stem(token) for token in tokens if token not in stop_words]
                 documents[filename] = tokens
                 # Compute term frequency
@@ -34,6 +34,7 @@ def preprocess_corpus():
                 for token in set(tokens):
                     doc_freq[token] = doc_freq.get(token, 0) + 1
     N = len(documents)
+    print(f"Number of documents loaded: {N}")  # Debug: Confirm corpus size
 
 # Step 2: Compute TF-IDF vectors and postings lists
 def compute_tfidf():
@@ -59,19 +60,19 @@ def compute_tfidf():
 
 # Step 3: Get IDF for a token
 def getidf(token):
-    token = stemmer.stem(token)
+    token = stemmer.stem(token.lower())  # Ensure lowercase input
     if token not in doc_freq:
         return -1
     return math.log10(N / doc_freq[token])
 
 # Step 4: Get TF-IDF weight for a token in a document
 def getweight(filename, token):
-    token = stemmer.stem(token)
+    token = stemmer.stem(token.lower())  # Ensure lowercase input
     return tfidf_vectors.get(filename, {}).get(token, 0)
 
 # Step 5: Process query and compute its TF-IDF vector
 def process_query(qstring):
-    tokens = tokenizer.tokenize(qstring.lower())
+    tokens = tokenizer.tokenize(qstring.lower())  # Convert query to lowercase
     tokens = [stemmer.stem(token) for token in tokens if token not in stop_words]
     if not tokens:
         return None, 0
@@ -91,7 +92,7 @@ def process_query(qstring):
         query_vector[token] /= norm
     return query_vector, tokens
 
-# Step 6: Compute cosine similarity and find best document
+# Step 6: Process query and compute cosine similarity (with fixed upper bound)
 def query(qstring):
     query_vector, query_tokens = process_query(qstring)
     if not query_vector:
@@ -124,9 +125,8 @@ def query(qstring):
                     actual_score += query_vector[token] * candidates[doc][token]
                 else:
                     all_tokens_present = False
-                    upper_bound += query_vector[token] * (postings[token][9][1] if len(postings[token]) >= 10 else 0)
-            if token in candidates.get(doc, {}):
-                upper_bound += query_vector[token] * candidates[doc][token]
+                    # Add upper bound only for missing tokens
+                    upper_bound += query_vector[token] * (postings[token][9][1] if len(postings[token]) >= 10 else postings[token][-1][1] if postings[token] else 0)
         scores[doc] = actual_score if all_tokens_present else 0
         upper_bounds[doc] = actual_score + upper_bound if not all_tokens_present else actual_score
 
@@ -143,7 +143,7 @@ def query(qstring):
             if is_best:
                 best_doc, best_score = doc, scores[doc]
 
-    if best_doc:
+    if best_doc and best_score > 0:  # Ensure score is positive
         return best_doc, best_score
     return "fetch more", 0
 
@@ -153,6 +153,7 @@ compute_tfidf()
 
 # Test cases
 if __name__ == "__main__":
+    print(N)  # Print number of documents
     print("%.12f" % getidf('british'))
     print("%.12f" % getidf('union'))
     print("%.12f" % getidf('dollar'))
