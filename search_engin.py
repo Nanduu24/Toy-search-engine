@@ -1,0 +1,172 @@
+import os
+import math
+from nltk.tokenize import RegexpTokenizer
+from nltk.corpus import stopwords
+from nltk.stem.porter import PorterStemmer
+
+# Global variables
+corpusroot = './US_Inaugural_Addresses'
+documents = {}
+tokens_freq = {}  # Term frequency per document
+doc_freq = {}     # Document frequency per token
+tfidf_vectors = {}  # Normalized TF-IDF vectors
+postings = {}     # Postings lists for each token
+N = 0             # Total number of documents
+stop_words = set(stopwords.words('english'))
+stemmer = PorterStemmer()
+tokenizer = RegexpTokenizer(r'[a-zA-Z]+')
+
+# Step 1: Preprocess the corpus
+def preprocess_corpus():
+    global N
+    for filename in os.listdir(corpusroot):
+        if filename.endswith('.txt'):
+            with open(os.path.join(corpusroot, filename), 'r', encoding='windows-1252') as file:
+                text = file.read().lower()
+                tokens = tokenizer.tokenize(text)
+                tokens = [stemmer.stem(token) for token in tokens if token not in stop_words]
+                documents[filename] = tokens
+                # Compute term frequency
+                tokens_freq[filename] = {}
+                for token in tokens:
+                    tokens_freq[filename][token] = tokens_freq[filename].get(token, 0) + 1
+                # Update document frequency
+                for token in set(tokens):
+                    doc_freq[token] = doc_freq.get(token, 0) + 1
+    N = len(documents)
+
+# Step 2: Compute TF-IDF vectors and postings lists
+def compute_tfidf():
+    for filename, tokens in documents.items():
+        tfidf_vectors[filename] = {}
+        # Compute raw TF-IDF weights
+        for token in set(tokens):
+            tf = 1 + math.log10(tokens_freq[filename][token])
+            idf = math.log10(N / doc_freq[token])
+            tfidf_vectors[filename][token] = tf * idf
+        # Normalize the vector
+        norm = math.sqrt(sum(w ** 2 for w in tfidf_vectors[filename].values()))
+        for token in tfidf_vectors[filename]:
+            tfidf_vectors[filename][token] /= norm
+        # Build postings lists
+        for token in tfidf_vectors[filename]:
+            if token not in postings:
+                postings[token] = []
+            postings[token].append((filename, tfidf_vectors[filename][token]))
+    # Sort postings lists by weight in descending order
+    for token in postings:
+        postings[token].sort(key=lambda x: x[1], reverse=True)
+
+# Step 3: Get IDF for a token
+def getidf(token):
+    token = stemmer.stem(token)
+    if token not in doc_freq:
+        return -1
+    return math.log10(N / doc_freq[token])
+
+# Step 4: Get TF-IDF weight for a token in a document
+def getweight(filename, token):
+    token = stemmer.stem(token)
+    return tfidf_vectors.get(filename, {}).get(token, 0)
+
+# Step 5: Process query and compute its TF-IDF vector
+def process_query(qstring):
+    tokens = tokenizer.tokenize(qstring.lower())
+    tokens = [stemmer.stem(token) for token in tokens if token not in stop_words]
+    if not tokens:
+        return None, 0
+    tf = {}
+    query_vector = {}
+    # Compute term frequency in query
+    for token in tokens:
+        tf[token] = tf.get(token, 0) + 1
+    # Compute TF-IDF weights
+    for token in set(tokens):
+        if token in doc_freq:
+            tfidf = (1 + math.log10(tf[token])) * math.log10(N / doc_freq[token])
+            query_vector[token] = tfidf
+    # Normalize query vector
+    norm = math.sqrt(sum(w ** 2 for w in query_vector.values()))
+    for token in query_vector:
+        query_vector[token] /= norm
+    return query_vector, tokens
+
+# Step 6: Compute cosine similarity and find best document
+def query(qstring):
+    query_vector, query_tokens = process_query(qstring)
+    if not query_vector:
+        return "None", 0
+
+    # Get top-10 postings for each query token
+    top_10 = {}
+    for token in query_tokens:
+        if token in postings:
+            top_10[token] = postings[token][:10]
+
+    # Candidate documents and their scores
+    candidates = {}
+    for token in top_10:
+        for doc, weight in top_10[token]:
+            if doc not in candidates:
+                candidates[doc] = {}
+            candidates[doc][token] = weight
+
+    # Compute actual and upper-bound scores
+    scores = {}
+    upper_bounds = {}
+    for doc in documents:
+        actual_score = 0
+        upper_bound = 0
+        all_tokens_present = True
+        for token in query_tokens:
+            if token in postings:
+                if doc in candidates and token in candidates[doc]:
+                    actual_score += query_vector[token] * candidates[doc][token]
+                else:
+                    all_tokens_present = False
+                    upper_bound += query_vector[token] * (postings[token][9][1] if len(postings[token]) >= 10 else 0)
+            if token in candidates.get(doc, {}):
+                upper_bound += query_vector[token] * candidates[doc][token]
+        scores[doc] = actual_score if all_tokens_present else 0
+        upper_bounds[doc] = actual_score + upper_bound if not all_tokens_present else actual_score
+
+    # Find the best document
+    best_doc = None
+    best_score = -1
+    for doc in scores:
+        if scores[doc] > best_score:
+            is_best = True
+            for other_doc in scores:
+                if other_doc != doc and scores[doc] < upper_bounds[other_doc]:
+                    is_best = False
+                    break
+            if is_best:
+                best_doc, best_score = doc, scores[doc]
+
+    if best_doc:
+        return best_doc, best_score
+    return "fetch more", 0
+
+# Initialize the system
+preprocess_corpus()
+compute_tfidf()
+
+# Test cases
+if __name__ == "__main__":
+    print("%.12f" % getidf('british'))
+    print("%.12f" % getidf('union'))
+    print("%.12f" % getidf('dollar'))
+    print("%.12f" % getidf('constitution'))
+    print("%.12f" % getidf('power'))
+    print("--------------")
+    print("%.12f" % getweight('19_lincoln_1861.txt', 'states'))
+    print("%.12f" % getweight('07_madison_1813.txt', 'war'))
+    print("%.12f" % getweight('05_jefferson_1805.txt', 'false'))
+    print("%.12f" % getweight('22_grant_1873.txt', 'proposition'))
+    print("%.12f" % getweight('16_taylor_1849.txt', 'duties'))
+    print("--------------")
+    print("(%s, %.12f)" % query("executive power"))
+    print("(%s, %.12f)" % query("foreign government"))
+    print("(%s, %.12f)" % query("public rights"))
+    print("(%s, %.12f)" % query("people government"))
+    print("(%s, %.12f)" % query("states laws"))
