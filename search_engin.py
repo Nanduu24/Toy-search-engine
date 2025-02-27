@@ -45,15 +45,6 @@ def compute_tfidf():
             tf = 1 + math.log10(tokens_freq[filename][token])
             idf = math.log10(N / doc_freq[token])
             tfidf_vectors[filename][token] = tf * idf
-        for filename, tokens in documents.items():
-            tfidf_vectors[filename] = {}
-            for token in set(tokens):
-                tf = 1 + math.log10(tokens_freq[filename][token])
-                idf = math.log10(N / doc_freq[token])
-                raw_tfidf = tf * idf
-                print(f"Raw TF-IDF for '{token}' in '{filename}': {raw_tfidf:.12f}")  # Debug raw TF-IDF
-                tfidf_vectors[filename][token] = raw_tfidf
-            norm = math.sqrt(sum(w ** 2 for w in tfidf_vectors[filename].values()))
             for token in tfidf_vectors[filename]:
                 tfidf_vectors[filename][token] /= norm
         # Normalize the vector
@@ -164,7 +155,7 @@ compute_tfidf()
 
 # Test cases
 if __name__ == "__main__":
-    
+    print(N)  # Print number of documents
     print("%.12f" % getidf('british'))
     print("%.12f" % getidf('union'))
     print("%.12f" % getidf('dollar'))
