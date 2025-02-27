@@ -153,7 +153,7 @@ compute_tfidf()
 
 # Test cases
 if __name__ == "__main__":
-    print(N)  # Print number of documents
+    
     print("%.12f" % getidf('british'))
     print("%.12f" % getidf('union'))
     print("%.12f" % getidf('dollar'))
