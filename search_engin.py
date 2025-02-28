@@ -47,8 +47,9 @@ def compute_tfidf():
             tfidf_vectors[filename][token] = tf * idf
         # Normalize the vector
         norm = math.sqrt(sum(w ** 2 for w in tfidf_vectors[filename].values()))
-        for token in tfidf_vectors[filename]:
-            tfidf_vectors[filename][token] /= norm
+        if norm > 0:
+            for token in tfidf_vectors[filename]:
+                tfidf_vectors[filename][token] /= norm
         # Build postings lists
         for token in tfidf_vectors[filename]:
             if token not in postings:
@@ -153,7 +154,6 @@ compute_tfidf()
 
 # Test cases
 if __name__ == "__main__":
-    print(N)  # Print number of documents
     print("%.12f" % getidf('british'))
     print("%.12f" % getidf('union'))
     print("%.12f" % getidf('dollar'))
