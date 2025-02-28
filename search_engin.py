@@ -45,8 +45,6 @@ def compute_tfidf():
             tf = 1 + math.log10(tokens_freq[filename][token])
             idf = math.log10(N / doc_freq[token])
             tfidf_vectors[filename][token] = tf * idf
-            for token in tfidf_vectors[filename]:
-                tfidf_vectors[filename][token] /= norm
         # Normalize the vector
         norm = math.sqrt(sum(w ** 2 for w in tfidf_vectors[filename].values()))
         for token in tfidf_vectors[filename]:
